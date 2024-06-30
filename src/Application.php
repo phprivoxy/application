@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace PHPrivoxy\Application;
 
+use PHPrivoxy\Core\RootPath;
 use PHPrivoxy\Core\Server;
+use PHPrivoxy\Core\ServerWorker;
 use PHPrivoxy\Proxy\MITM;
 use PHPrivoxy\Proxy\MITM\ContextProvider;
 use PHPrivoxy\Proxy\PSR15Proxy;
@@ -14,9 +16,16 @@ use Relay\Relay;
 
 class Application
 {
+    use RootPath;
+
+// Multiple processes cannot be set using the count parameter in a Windows system.
+//A single workerman process in a Windows system can only support 200+ connections.
+
     private int $defaultProcesses = 1;
     private int $defaultPort = 8080;
     private string $defaultIP = '0.0.0.0';
+    private static string $logSubdirName = 'var/log';
+    private static string $tmpSubdirName = 'var/tmp';
     private ?int $processes; // Number of workers processes.
     private ?int $port; // PHPrivoxy port.
     private ?string $ip; // PHPrivoxy IP.
@@ -25,6 +34,8 @@ class Application
     private ?ContextProvider $contextProvider = null;
     private ?string $mitmHost = null; // MITM worker host.
     private array $middlewares = [];
+    private ?string $logDirectory;
+    private ?string $tmpDirectory;
 
     public function __construct(
             ?int $processes = null,
@@ -73,14 +84,45 @@ class Application
             $this->ip = $this->defaultIP;
         }
 
+        if (empty($this->logDirectory)) {
+            $this->logDirectory = self::getLogDirectory();
+        }
+
+        if (empty($this->tmpDirectory)) {
+            $this->tmpDirectory = self::getTmpDirectory();
+        }
+
         if (null === $this->psr15handler) {
             $this->psr15handler = new Relay($this->middlewares); // Relay will execute the queue in first-in-first-out order.
         }
+
         if (null === $this->tcpHandler) {
-            $this->tcpHandler = new MITM($this->psr15handler, $this->contextProvider, $this->mitmHost);
+            $this->tcpHandler = new MITM($this->psr15handler, $this->contextProvider, $this->logDirectory, $this->mitmHost);
         }
 
+        ServerWorker::setLogDirectory($this->logDirectory);
+        ServerWorker::setTmpDirectory($this->tmpDirectory);
         new Server($this->tcpHandler, $this->processes, $this->port, $this->ip);
+    }
+
+    public static function getLogDirectory(): string
+    {
+        return self::getRootPath() . '/' . self::$logSubdirName;
+    }
+
+    public static function getTmpDirectory(): string
+    {
+        return self::getRootPath() . '/' . self::$tmpSubdirName;
+    }
+
+    public function setLogDirectory(?string $path): void
+    {
+        $this->logDirectory = $path;
+    }
+
+    public function setTmpDirectory(?string $path): void
+    {
+        $this->tmpDirectory = $path;
     }
 
     public function setTcpHandler(PSR15Proxy $tcpHandler): void
