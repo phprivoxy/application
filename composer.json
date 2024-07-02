@@ -17,7 +17,7 @@
     ],
     "require": {
         "php": ">=8.1",
-        "phprivoxy/proxy": ">=0.8.8",
+        "phprivoxy/proxy": "^0.8.10",
         "phprivoxy/relay": ">=2.1.5",
         "psr/http-server-handler": "~1.0",
         "psr/http-server-middleware": "^1.0"
